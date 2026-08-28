@@ -1,0 +1,13 @@
+﻿server:
+  port: 8080
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-prod:5432/orden_db
+    username: admin
+    password: adminpassword
+eureka:
+  instance:
+    instance-id: ${spring.application.name}:${server.port}
+  client:
+    service-url:
+      defaultZone: http://pagatu-eureka:8761/eureka/

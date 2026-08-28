@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>S03_Equipo01_ParilloEliceo</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #222; margin: 40px; }
+  h1 { color: #0d47a1; border-bottom: 2px solid #0d47a1; padding-bottom: 8px; }
+  h2 { color: #1565c0; margin-top: 25px; border-bottom: 1px solid #ddd; }
+  h3 { color: #1976d2; }
+  img { max-width: 95%; height: auto; border: 1px solid #ccc; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.15); margin-top: 10px; }
+  .caption { font-size: 0.9em; color: #555; font-style: italic; margin-bottom: 20px; }
+  .box { background: #f5f5f5; padding: 15px; border-left: 4px solid #1976d2; border-radius: 4px; margin: 15px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+  th { background-color: #e3f2fd; }
+  @media print {
+    body { margin: 20px; }
+    img { max-width: 90%; page-break-inside: avoid; }
+    h2, h3 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>INFORME DE ACTIVIDAD AUTÓNOMA: SESIÓN 03</h1>
+<h2>Registro, Descubrimiento y Ejecución Concurrente de Servicios</h2>
+
+<div class="box">
+  <p><strong>Estudiante:</strong> Eliceo Parillo Mostajo</p>
+  <p><strong>Equipo:</strong> Equipo 01</p>
+  <p><strong>Sesión:</strong> S03 - Registro, Descubrimiento y Ejecución Concurrente de Servicios</p>
+  <p><strong>Rol o aporte realizado:</strong> Migración de <code>pagatu-orden-ms</code> a Config Client y Eureka Client, configuración centralizada en <code>config-repo</code>, despliegue simultáneo de dos instancias en paralelo y verificación del descubrimiento de servicios y persistencia compartida.</p>
+  <p><strong>Link de GitHub:</strong> <a href="https://github.com/eliceoparillo/pagatu-orden-ms">https://github.com/eliceoparillo/pagatu-orden-ms</a></p>
+</div>
+
+<h2>1. Evidencia Técnica</h2>
+
+<h3>1.1 Config Server Operativo (<code>pagatu-config</code>)</h3>
+<img src="evidencia_1_config_server.png" alt="Config Server">
+<p class="caption">Figura 1: Servidor <code>pagatu-config</code> (puerto 8888) en perfil native aprovisionando configuraciones centralizadas desde config-repo.</p>
+
+<h3>1.2 Eureka Server Operativo (<code>pagatu-eureka</code>)</h3>
+<img src="evidencia_2_eureka_server.png" alt="Eureka Server">
+<p class="caption">Figura 2: Servidor <code>pagatu-eureka</code> (puerto 8761) recibiendo registros y heartbeats de los microservicios.</p>
+
+<h3>1.3 <code>pagatu-catalogo-ms</code> Registrado en Eureka</h3>
+<img src="evidencia_3_catalogo_ms.png" alt="Catalogo MS">
+<p class="caption">Figura 3: Microservicio <code>pagatu-catalogo-ms</code> activo en el puerto 8081 y anunciado en Eureka con estado 204 UP.</p>
+
+<h3>1.4 <code>pagatu-orden-ms</code> - Primera Instancia (Puerto 8082)</h3>
+<img src="evidencia_4_orden_instancia1.png" alt="Orden MS Instancia 1">
+<p class="caption">Figura 4: Instancia 1 de <code>pagatu-orden-ms</code> iniciada en puerto 8082 y registrada como <code>pagatu-orden-ms:8082</code>.</p>
+
+<h3>1.5 <code>pagatu-orden-ms</code> - Segunda Instancia (Puerto 8083)</h3>
+<img src="evidencia_5_orden_instancia2.png" alt="Orden MS Instancia 2">
+<p class="caption">Figura 5: Instancia 2 de <code>pagatu-orden-ms</code> iniciada en puerto 8083 y registrada como <code>pagatu-orden-ms:8083</code>.</p>
+
+<h3>1.6 Dashboard Web de Eureka (<code>http://localhost:8761</code>)</h3>
+<img src="evidencia_6_eureka_web_dashboard.png" alt="Eureka Web Dashboard">
+<p class="caption">Figura 6: Dashboard web de Eureka evidenciando <code>PAGATU-CATALOGO-MS</code> (1 instancia) y <code>PAGATU-ORDEN-MS</code> (2 instancias) en estado UP.</p>
+
+<h3>1.7 Verificación Integral por PowerShell (Config + Eureka + CRUD)</h3>
+<img src="evidencia_7_pruebas_crud_powershell.png" alt="Pruebas CRUD">
+<p class="caption">Figura 7: Salida de PowerShell con usuario, fecha/hora, verificación JSON de Config Server, catálogo Eureka y CRUD concurrente exitoso.</p>
+
+<h2>2. Comprensión del Patrón (Service Registry)</h2>
+<p><strong>¿Por qué un componente que consulta el registro ya no necesita una lista de direcciones escrita a mano para encontrar ninguna de las dos instancias de pagatu-orden-ms, aunque ambos puertos sean fijos y elegidos a mano?</strong></p>
+<div class="box">
+El patrón <strong>Service Registry (Eureka)</strong> introduce una capa de abstracción basada en identificadores lógicos (<code>spring.application.name</code>):
+<ol>
+  <li><strong>Abstracción por Nombre Lógico:</strong> Los componentes clientes (como un API Gateway o servicios mediante OpenFeign) no se comunican directamente con <code>localhost:8082</code> ni <code>localhost:8083</code>. En su lugar, solicitan al registro: <em>"Dame las instancias disponibles de <code>PAGATU-ORDEN-MS</code>"</em>.</li>
+  <li><strong>Autorregistro Dinámico:</strong> Cada instancia al iniciar publica automáticamente sus metadatos (IP, puerto y estado de salud). Eureka mantiene actualizado el catálogo mediante <em>heartbeats</em> periódicos.</li>
+  <li><strong>Descubrimiento y Balanceo en Memoria:</strong> El componente que consulta el registro descarga la lista de nodos y aplica un balanceador de carga del lado del cliente (Spring Cloud LoadBalancer con Round Robin) para distribuir las peticiones entre el puerto 8082 y 8083.</li>
+  <li><strong>Desacoplamiento Total:</strong> Aunque los puertos sean fijos y elegidos a mano, el cliente nunca los tiene codificados (<em>hardcoded</em>). Si se agregan más puertos o se cambian los servidores, el sistema continúa funcionando sin necesidad de modificar ni una sola línea de código o configuración en los servicios consumidores.</li>
+</ol>
+</div>
+
+<h2>3. Error o Hallazgo Diagnosticado</h2>
+<div class="box">
+<ul>
+  <li><strong>Descripción del Problema:</strong> Al compilar y arrancar <code>pagatu-orden-ms</code>, se presentó el error <code>Failed to configure a DataSource: 'url' attribute is not specified</code> y la aplicación fallaba al iniciar. Además, en los archivos Java figuraba el error <code>illegal character: '\ufeff'</code>.</li>
+  <li><strong>Causa Raíz:</strong> 
+    1. Los archivos fuente tenían caracteres de marca de orden de bytes (<em>UTF-8 with BOM</em>) agregados por el editor de texto.<br>
+    2. En el archivo <code>pom.xml</code> faltaban las dependencias de <code>spring-cloud-starter-config</code> y <code>spring-cloud-starter-netflix-eureka-client</code>, lo que impedía que Spring Boot procesara la directiva <code>spring.config.import</code> para descargar la configuración de PostgreSQL desde el Config Server.
+  </li>
+  <li><strong>Solución Implementada:</strong> Se ejecutó un script en PowerShell para limpiar el carácter BOM (<code>\ufeff</code>) de los archivos <code>.java</code>. Luego, se actualizaron las dependencias en <code>pom.xml</code> integrando el BOM <code>spring-cloud-dependencies</code> (versión <code>2024.0.0</code>) y las librerías de Config y Eureka Client, permitiendo que <code>pagatu-orden-ms</code> inicie correctamente conectado a su configuración remota.</li>
+</ul>
+</div>
+
+<h2>4. Reflexión Técnica Breve</h2>
+<p><strong>¿Por qué el registro y descubrimiento de servicios es un prerrequisito para el Gateway y el balanceo de carga que se construyen en S4?</strong></p>
+<div class="box">
+<em>"El registro y descubrimiento de servicios es un prerrequisito indispensable porque el API Gateway no debe estar acoplado a direcciones IP ni a puertos estáticos de la infraestructura. En una arquitectura de microservicios, las instancias son efímeras y escalan horizontalmente según la demanda de tráfico. Eureka provee la tabla de enrutamiento viva y centralizada que el Gateway consulta en tiempo real para resolver rutas dinámicas. Sin el Service Registry, sería imposible balancear la carga automáticamente (Round Robin) o redirigir el tráfico ante la caída de un nodo sin tener que reescribir y reiniciar manualmente la configuración del Gateway."</em>
+</div>
+
+<h2>5. Preguntas de Defensa</h2>
+<ol>
+  <li><strong>¿Por qué <code>pagatu-eureka</code> no se registra a sí mismo (<code>register-with-eureka: false</code>)?</strong><br>Porque opera como un servidor de registro central <em>standalone</em>. Si intentara registrarse a sí mismo, emitiría peticiones fallidas continuas buscando réplicas de clúster inexistentes, generando sobrecarga innecesaria en los logs.</li>
+  <li><strong>¿Qué pasaría si intentaras levantar la segunda instancia de <code>pagatu-orden-ms</code> sin el override <code>--server.port=8083</code>?</strong><br>Se produciría una excepción <code>java.net.BindException: Address already in use</code> (<code>PortAlreadyInUseException</code>), dado que dos procesos no pueden escuchar en el mismo socket TCP (8082).</li>
+  <li><strong>¿Cómo verificaste que <code>pagatu-orden-ms</code> quedó correctamente registrado, y no solo que el proceso arrancó?</strong><br>Consultando la API REST de Eureka (<code>/eureka/apps</code>) y el Dashboard web, corroborando que ambas instancias aparecen con estado <code>UP</code> y con sus <code>instanceId</code> diferenciados.</li>
+  <li><strong>¿Qué le pasa a una instancia en el dashboard de Eureka si dejas de enviarle heartbeat (Ctrl+C)?</strong><br>Eureka deja de recibir los latidos de renovación (cada 30s). Al expirar el tiempo de arrendamiento (<em>lease expiration</em> de 90s), el servidor elimina la instancia de su catálogo para evitar redirigir tráfico a un servicio caído.</li>
+  <li><strong>¿Por qué el nombre lógico (<code>spring.application.name</code>) es el mismo dato que ya usa <code>pagatu-config</code> desde S2?</strong><br>Porque actúa como la clave primaria canónica en el ecosistema Spring Cloud: Config Server lo usa para asociar el archivo YAML en el repositorio (<code>pagatu-orden-ms-dev.yml</code>) y Eureka lo emplea como el Service ID (VIPAddress) para el descubrimiento.</li>
+</ol>
+
+<h2>Anexo: Feedback de la Sesión</h2>
+<ol>
+  <li><strong>¿Cuál es el aprendizaje más importante que te llevas de la clase de hoy?</strong><br>Comprender cómo el Service Registry (Eureka) permite que los microservicios se descubran dinámicamente usando únicamente su nombre lógico, abstrayendo por completo los puertos e IPs físicas.</li>
+  <li><strong>¿Qué punto de la clase te resultó más confuso o te dejó con dudas?</strong><br>El funcionamiento del <em>Self-Preservation Mode</em> de Eureka y cómo se configuran los umbrales de expiración del <em>heartbeat</em> en entornos distribuidos.</li>
+  <li><strong>¿Tienes alguna pregunta que te gustaría que sea respondida la siguiente clase?</strong><br>¿Cómo gestiona Spring Cloud Gateway la distribución del tráfico cuando una instancia registrada en Eureka comienza a responder con errores HTTP 500 pero sigue enviando <em>heartbeats</em> como <code>UP</code>?</li>
+  <li><strong>Sobre tu nivel de comprensión de la clase de hoy:</strong> [X] ¡Entendido! - Lo domino y podría explicarlo.</li>
+  <li><strong>¿Cómo puedo ayudarte a comprender mejor el tema?</strong><br>Incluyendo diagramas de secuencia visuales sobre el ciclo de vida del <em>heartbeat</em> y la resolución de rutas en el Gateway.</li>
+  <li><strong>Pensando en tu participación y esfuerzo:</strong> [X] Muy Comprometido/a: Me esforcé al máximo.</li>
+  <li><strong>Mi satisfacción con la clase fue:</strong> 10 / 10</li>
+</ol>
+
+</body>
+</html>
